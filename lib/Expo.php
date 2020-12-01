@@ -112,7 +112,27 @@ class Expo
             throw ExpoException::failedCompletelyException($response);
         }
 
+        foreach ($interests as $interest) {
+            $this->unsubscribeFailedTokens($interest, $recipients, $response);
+        }
+
         return $response;
+    }
+
+    /**
+     * @param $response
+     */
+    private function unsubscribeFailedTokens(string $interest, array $tokens, array $response)
+    {
+        foreach ($tokens as $i => $token) {
+            if (isset($response[$i])) {
+                $pushResponse = $response[$i];
+
+                if ($pushResponse['status'] === 'error' && $pushResponse['details']['error'] === 'DeviceNotRegistered') {
+                    $this->unsubscribe($interest, $token);
+                }
+            }
+        }
     }
 
     /**
