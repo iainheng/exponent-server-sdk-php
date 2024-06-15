@@ -26,6 +26,11 @@ class Expo
      * @var ExpoRegistrar
      */
     private $registrar;
+    
+    /** 
+     * @var string|null
+     */
+    private $accessToken = null;
 
     /**
      * Expo constructor.
@@ -73,6 +78,13 @@ class Expo
     {
         return $this->registrar->removeInterest($interest, $token);
     }
+    
+    /**
+     * @param string|null $accessToken
+     */
+    public function setAccessToken(string $accessToken = null) {
+        $this->accessToken = $accessToken;
+    }
 
     /**
      * Send a notification via the Expo Push Notifications Api.
@@ -103,7 +115,7 @@ class Expo
 
         $ch = $this->prepareCurl();
 
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData, JSON_UNESCAPED_UNICODE));
 
         $response = $this->executeCurl($ch);
 
@@ -168,16 +180,39 @@ class Expo
     {
         $ch = $this->getCurl();
 
+        $headers = [
+                'accept: application/json',
+                'content-type: application/json',
+        ];
+
+        if ($this->accessToken) {
+            $headers[] = sprintf('Authorization: Bearer %s', $this->accessToken);
+        }
+
         // Set cURL opts
         curl_setopt($ch, CURLOPT_URL, self::EXPO_API_URL);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'accept: application/json',
-            'content-type: application/json',
-        ]);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
         return $ch;
+    }
+
+    /**
+     * Handle with unexpected response error
+     *
+     * @throws UnexpectedResponseException
+     *
+     * @return null|resource
+     */
+    private function handleWithUnexpectedResponse($response) {
+        if (is_array($response) && isset($response['body'])) {
+            $errors = json_decode($response['body'])->errors ?? [];
+
+            return $errors[0]->message ?? null;
+        }
+
+        return null;
     }
 
     /**
@@ -219,7 +254,9 @@ class Expo
         $responseData = json_decode($response['body'], true)['data'] ?? null;
 
         if (! is_array($responseData)) {
-            throw new UnexpectedResponseException();
+            throw new UnexpectedResponseException(
+                $this->handleWithUnexpectedResponse($response)
+            );
         }
 
         return $responseData;
